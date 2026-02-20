@@ -235,23 +235,47 @@ async def notify_command(interaction: discord.Interaction, request: str):
         return
     
     try:
-        # Send to OpenClaw for processing
-        # Use the configured OLLAMA_URL or OpenClaw gateway
+        await interaction.followup.send(f"🔍 Checking: {request}...")
+        
+        # Step 1: Search the web for current info
+        search_results = ""
+        try:
+            # Use a simple approach - search via DuckDuckGo or similar
+            # For now, we'll use a basic approach with subprocess
+            search_query = request.replace(' ', '+')
+            # Just get page titles via yt-dlp or similar as a workaround
+            result = subprocess.run(
+                ['yt-dlp', '--flat-playlist', '-J', f'ytsearch3:{request}'],
+                capture_output=True, text=True, timeout=15
+            )
+            import json
+            data = json.loads(result.stdout)
+            entries = data.get('entries', [])
+            if entries:
+                search_results = "Here's what I found: "
+                for e in entries[:3]:
+                    search_results += e.get('title', '') + ". "
+        except Exception as e:
+            logger.warning(f"Search failed: {e}")
+            search_results = ""
+        
+        # Step 2: Get AI to summarize for TTS
         openclaw_url = OLLAMA_URL.replace('/api/generate', '')
-        
-        # Call OpenClaw to process the request
-        # This is where OpenClaw (the brain) processes the request
-        # and returns a response to be spoken
-        
         response_text = None
         
-        # Try calling OpenClaw's chat API if available
         try:
+            # Build a prompt that includes search results
+            prompt = f"""You are giving a quick voice update. 
+Context: {search_results}
+User asked: {request}
+
+Provide a brief 1-2 sentence update that sounds natural when spoken. Don't mention you're an AI."""
+            
             chat_payload = {
                 "model": "llama3.2",
                 "messages": [
-                    {"role": "system", "content": "You are OpenClaw's voice assistant. Provide a concise, conversational response that can be spoken aloud. Keep it brief (2-3 sentences max)."},
-                    {"role": "user", "content": request}
+                    {"role": "system", "content": "You are giving a quick voice update. Keep it brief, conversational, and natural. 1-2 sentences max."},
+                    {"role": "user", "content": prompt}
                 ],
                 "stream": False
             }
@@ -264,13 +288,13 @@ async def notify_command(interaction: discord.Interaction, request: str):
                 resp_data = chat_resp.json()
                 response_text = resp_data.get('choices', [{}])[0].get('message', {}).get('content', '')
         except Exception as e:
-            logger.warning(f"OpenClaw chat unavailable: {e}")
+            logger.warning(f"AI unavailable: {e}")
         
-        # If no response from OpenClaw, use a fallback
+        # Fallback if nothing worked
         if not response_text:
-            response_text = f"I'll check that out for you. {request}"
+            response_text = search_results if search_results else f"Here's what I found about {request}."
         
-        # Join voice and speak the response
+        # Step 3: Join voice and speak
         await disconnect_voice(interaction.guild_id)
         vc = await interaction.user.voice.channel.connect()
         voice_clients[interaction.guild_id] = vc
@@ -300,10 +324,12 @@ async def notify_command(interaction: discord.Interaction, request: str):
         
         vc.play(source, after=after_playing)
         
-        await interaction.followup.send(f"🔔 **OpenClaw:** {response_text}")
+        await interaction.followup.send(f"🔔 **{response_text}**")
         
     except Exception as e:
         logger.error(f"Notify error: {e}")
+        import traceback
+        traceback.print_exc()
         await interaction.followup.send(f"❌ Error: {str(e)[:100]}")
 
 # ============== MESSAGE HANDLER ==============
