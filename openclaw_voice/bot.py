@@ -261,39 +261,24 @@ async def notify_command(interaction: discord.Interaction, request: str):
         if should_respond('normal'):
             await interaction.followup.send(f"🔍 Checking: {request}...")
         
-        # Step 1: Search the web for current info
-        search_results = ""
-        try:
-            result = subprocess.run(
-                ['yt-dlp', '--flat-playlist', '-J', f'ytsearch3:{request}'],
-                capture_output=True, text=True, timeout=15
-            )
-            import json
-            data = json.loads(result.stdout)
-            entries = data.get('entries', [])
-            if entries:
-                search_results = "Here's what I found: "
-                for e in entries[:3]:
-                    search_results += e.get('title', '') + ". "
-        except Exception as e:
-            logger.warning(f"Search failed: {e}")
+        # Use AI directly - it has broad knowledge
+        # (Removed YouTube search since it wasn't giving good results)
         
-        # Step 2: Get AI to summarize for TTS
+        # Step 2: Get AI to summarize for TTS (skip YouTube search, use AI knowledge)
         response_text = None
         
         if ENABLE_AI:
             try:
                 openclaw_url = OLLAMA_URL.replace('/api/generate', '')
-                prompt = f"""You are giving a quick voice update. 
-Context: {search_results}
-User asked: {request}
+                # Ask AI directly - it has knowledge about weather, news, etc.
+                prompt = f"""The user asked: "{request}"
 
-Provide a brief 1-2 sentence update that sounds natural when spoken."""
+Give a direct, accurate answer as if you're telling them verbally. Keep it very brief - one short sentence or two. Be conversational and helpful. If it's about current weather, give them actual weather info. If it's news, summarize the latest headlines."""
                 
                 chat_payload = {
                     "model": "llama3.2",
                     "messages": [
-                        {"role": "system", "content": "You are giving a quick voice update. Keep it brief, conversational, and natural. 1-2 sentences max."},
+                        {"role": "system", "content": "You are giving a quick verbal update. Be direct, accurate, and conversational. One sentence max."},
                         {"role": "user", "content": prompt}
                     ],
                     "stream": False
@@ -311,7 +296,7 @@ Provide a brief 1-2 sentence update that sounds natural when spoken."""
         
         # Fallback
         if not response_text:
-            response_text = search_results if search_results else f"Here's what I found about {request}."
+            response_text = f"Here's some information about {request}."
         
         # Step 3: Join voice and speak
         await disconnect_voice(interaction.guild_id)
