@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from openclaw_voice.config import (
     BOT_TOKEN, BOT_NAME, DEFAULT_VOLUME, NOTIFIER_PORT,
-    VERBOSITY, ENABLE_AI, OLLAMA_URL, should_respond
+    VERBOSITY, ENABLE_AI, OLLAMA_URL, OPENCLAW_URL, should_respond
 )
 
 # Setup logging
@@ -259,46 +259,44 @@ async def notify_command(interaction: discord.Interaction, request: str):
     
     try:
         if should_respond('normal'):
-            await interaction.followup.send(f"🔍 Checking: {request}...")
+            await interaction.followup.send(f"🔄 Asking OpenClaw...")
         
-        # Use AI directly - it has broad knowledge
-        # (Removed YouTube search since it wasn't giving good results)
-        
-        # Step 2: Get AI to summarize for TTS (skip YouTube search, use AI knowledge)
+        # Step 1: Call OpenClaw (the brain) to process the request
         response_text = None
         
-        if ENABLE_AI:
-            try:
-                openclaw_url = OLLAMA_URL.replace('/api/generate', '')
-                # Ask AI directly - it has knowledge about weather, news, etc.
-                prompt = f"""The user asked: "{request}"
-
-Give a direct, accurate answer as if you're telling them verbally. Keep it very brief - one short sentence or two. Be conversational and helpful. If it's about current weather, give them actual weather info. If it's news, summarize the latest headlines."""
-                
-                chat_payload = {
-                    "model": "llama3.2",
-                    "messages": [
-                        {"role": "system", "content": "You are giving a quick verbal update. Be direct, accurate, and conversational. One sentence max."},
-                        {"role": "user", "content": prompt}
-                    ],
-                    "stream": False
-                }
-                chat_resp = requests.post(
-                    f"{openclaw_url}/api/chat/completions",
-                    json=chat_payload,
-                    timeout=30
-                )
-                if chat_resp.ok:
-                    resp_data = chat_resp.json()
-                    response_text = resp_data.get('choices', [{}])[0].get('message', {}).get('content', '')
-            except Exception as e:
-                logger.warning(f"AI unavailable: {e}")
+        # Try calling OpenClaw's chat API
+        try:
+            # Use localhost:11434 or configure OpenClaw URL
+            openclaw_url = OPENCLAW_URL.replace('/api/generate', '')
+            
+            # Call Ollama for chat - this is the "brain"
+            # OpenClaw will use its tools, search, etc. to get a good answer
+            chat_payload = {
+                "model": "llama3.2",
+                "messages": [
+                    {"role": "system", "content": "You are OpenClaw's voice assistant. The user wants you to speak this response in a voice channel. Give a direct, accurate, conversational answer. Keep it brief - one sentence or two max. Make it sound natural when spoken aloud."},
+                    {"role": "user", "content": request}
+                ],
+                "stream": False
+            }
+            chat_resp = requests.post(
+                f"{openclaw_url}/api/chat/completions",
+                json=chat_payload,
+                timeout=60  # Longer timeout for AI processing
+            )
+            if chat_resp.ok:
+                resp_data = chat_resp.json()
+                response_text = resp_data.get('choices', [{}])[0].get('message', {}).get('content', '')
+            else:
+                logger.warning(f"OpenClaw unavailable: {chat_resp.status_code}")
+        except Exception as e:
+            logger.warning(f"OpenClaw error: {e}")
         
-        # Fallback
+        # Fallback if no response
         if not response_text:
-            response_text = f"Here's some information about {request}."
+            response_text = f"I couldn't get a response from OpenClaw. But regarding {request}."
         
-        # Step 3: Join voice and speak
+        # Step 2: Join voice and speak
         await disconnect_voice(interaction.guild_id)
         vc = await interaction.user.voice.channel.connect()
         voice_clients[interaction.guild_id] = vc
