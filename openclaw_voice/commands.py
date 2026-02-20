@@ -19,12 +19,12 @@ def setup_commands(tree, bot):
     @tree.command(name="play", description="Play YouTube audio in voice channel")
     async def play_command(interaction: discord.Interaction, query: str):
         """Play music from YouTube"""
-        await interaction.response.defer()
-        
+        # Check voice first - respond immediately
         if not interaction.user.voice:
-            if should_respond('minimal'):
-                await interaction.followup.send("❌ Join a voice channel first!")
+            await interaction.response.send_message("❌ Join a voice channel first!", ephemeral=True)
             return
+        
+        await interaction.response.defer()
         
         try:
             if should_respond('normal'):
@@ -49,7 +49,7 @@ def setup_commands(tree, bot):
     
     @tree.command(name="search", description="Search for audio streams")
     async def search_command(interaction: discord.Interaction, query: str):
-        """Search for streams"""
+        """Search for streams - doesn't require voice"""
         await interaction.response.defer()
         
         try:
@@ -78,7 +78,7 @@ def setup_commands(tree, bot):
     async def say_command(interaction: discord.Interaction, message: str):
         """TTS in voice channel"""
         if not interaction.user.voice:
-            await interaction.response.send_message("❌ Join a voice channel first!")
+            await interaction.response.send_message("❌ Join a voice channel first!", ephemeral=True)
             return
         
         await interaction.response.defer()
@@ -98,7 +98,7 @@ def setup_commands(tree, bot):
     async def stream_command(interaction: discord.Interaction, url: str):
         """Play direct URL"""
         if not interaction.user.voice:
-            await interaction.response.send_message("❌ Join a voice channel first!")
+            await interaction.response.send_message("❌ Join a voice channel first!", ephemeral=True)
             return
         
         await interaction.response.defer()
@@ -118,7 +118,7 @@ def setup_commands(tree, bot):
     async def join_command(interaction: discord.Interaction):
         """Join voice channel"""
         if not interaction.user.voice:
-            await interaction.response.send_message("❌ Join a voice channel first!")
+            await interaction.response.send_message("❌ Join a voice channel first!", ephemeral=True)
             return
         
         await player.disconnect(interaction.guild_id)
