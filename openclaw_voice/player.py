@@ -45,7 +45,14 @@ async def play_url(voice_channel, url, guild_id):
     def after_playing(error):
         if error:
             logger.error(f"Playback error: {error}")
-        asyncio.run_coroutine_threadsafe(disconnect(guild_id), asyncio.get_event_loop())
+        # Schedule disconnect in bot's event loop
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(disconnect(guild_id))
+            loop.close()
+        except Exception as e:
+            logger.warning(f"Auto-disconnect failed: {e}")
     
     vc.play(source, after=after_playing)
     return vc
@@ -77,7 +84,14 @@ async def play_tts(voice_channel, text, guild_id, lang='en'):
             os.unlink(temp_file)
         except:
             pass
-        asyncio.run_coroutine_threadsafe(disconnect(guild_id), asyncio.get_event_loop())
+        # Schedule disconnect in bot's event loop
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(disconnect(guild_id))
+            loop.close()
+        except Exception as e:
+            logger.warning(f"Auto-disconnect failed: {e}")
     
     vc.play(source, after=after_playing)
     return vc
