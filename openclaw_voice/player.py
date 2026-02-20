@@ -19,13 +19,16 @@ voice_clients = {}
 
 async def disconnect(guild_id):
     """Disconnect voice client for a guild"""
-    if guild_id in voice_clients:
-        try:
-            await voice_clients[guild_id].disconnect()
-        except Exception as e:
-            logger.warning(f"Disconnect error: {e}")
-        finally:
-            del voice_clients[guild_id]
+    try:
+        if guild_id in voice_clients:
+            try:
+                await voice_clients[guild_id].disconnect()
+            except Exception as e:
+                logger.warning(f"Disconnect error: {e}")
+            finally:
+                del voice_clients[guild_id]
+    except KeyError:
+        pass  # Already disconnected
 
 
 async def play_url(voice_channel, url, guild_id):
