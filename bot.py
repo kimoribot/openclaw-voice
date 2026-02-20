@@ -25,6 +25,7 @@ BOT_TOKEN = os.getenv('DISCORD_BOT_TOKEN', '')
 BOT_NAME = os.getenv('BOT_NAME', 'OpenClaw')
 DEFAULT_VOLUME = float(os.getenv('DEFAULT_VOLUME', '0.8'))
 NOTIFIER_PORT = int(os.getenv('NOTIFIER_PORT', '5000'))
+OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://localhost:11434')
 
 # Setup logging
 logging.basicConfig(
@@ -143,6 +144,53 @@ async def leave_command(interaction: discord.Interaction):
     await disconnect_voice(interaction.guild_id)
     await interaction.response.send_message("👋 Left!")
 
+@tree.command(name="say", description="Speak a message in your voice channel")
+async def say_command(interaction: discord.Interaction, message: str):
+    """TTS in voice channel"""
+    if not interaction.user.voice:
+        await interaction.response.send_message("❌ Join a voice channel first!")
+        return
+    
+    await interaction.response.defer()
+    
+    try:
+        # Disconnect existing
+        await disconnect_voice(interaction.guild_id)
+        
+        # Connect
+        vc = await interaction.user.voice.channel.connect()
+        voice_clients[interaction.guild_id] = vc
+        
+        # Generate TTS
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+            tts = gTTS(text=message, lang='en')
+            tts.save(f.name)
+            temp_file = f.name
+        
+        # Play
+        source = discord.FFmpegPCMAudio(temp_file)
+        source = discord.PCMVolumeTransformer(source)
+        source.volume = DEFAULT_VOLUME
+        
+        def after_playing(error):
+            if error:
+                logger.error(f"TTS error: {error}")
+            asyncio.run_coroutine_threadsafe(
+                disconnect_voice(interaction.guild_id), 
+                bot.loop
+            )
+            try:
+                os.unlink(temp_file)
+            except:
+                pass
+        
+        vc.play(source, after=after_playing)
+        await interaction.followup.send(f"🗣️ Saying: {message}")
+        
+    except Exception as e:
+        logger.error(f"Say error: {e}")
+        await interaction.followup.send(f"❌ Error: {str(e)[:100]}")
+
 # ============== MESSAGE HANDLER ==============
 
 @bot.event
@@ -165,12 +213,42 @@ async def on_message(message):
                     self.user = msg.author
                     self.guild_id = msg.guild.id
                     self.guild = msg.guild
+                    self.channel = msg.channel
             await play_command_legacy(MockInteraction(message), content.split(' ', 1)[1])
         return
     
     if content in ['stop', 'leave']:
         await disconnect_voice(message.guild.id)
         await message.channel.send("⏹️ Stopped!")
+        return
+    
+    # Say command
+    if content.startswith('say '):
+        if message.author.voice:
+            class MockInteraction:
+                def __init__(self, msg):
+                    self.user = msg.author
+                    self.guild_id = msg.guild.id
+                    self.guild = msg.guild
+                    self.channel = msg.channel
+            await say_command_legacy(MockInteraction(message), content[4:])
+        else:
+            await message.channel.send("❌ Join a voice channel first!")
+        return
+    
+    # Stream command
+    if content.startswith('stream '):
+        if message.author.voice:
+            class MockInteraction:
+                def __init__(self, msg):
+                    self.user = msg.author
+                    self.guild_id = msg.guild.id
+                    self.guild = msg.guild
+                    self.channel = msg.channel
+            await stream_command_legacy(MockInteraction(message), content[7:])
+        else:
+            await message.channel.send("❌ Join a voice channel first!")
+        return
 
 async def play_command_legacy(message, query):
     """Legacy play command for message-based commands"""
@@ -219,6 +297,80 @@ async def play_command_legacy(message, query):
         
     except Exception as e:
         logger.error(f"Play error: {e}")
+        await message.channel.send(f"❌ Error: {str(e)[:100]}")
+
+async def say_command_legacy(message, text: str):
+    """Legacy say command"""
+    if not message.user.voice:
+        await message.channel.send("❌ Join a voice channel first!")
+        return
+    
+    try:
+        await disconnect_voice(message.guild_id)
+        
+        vc = await message.user.voice.channel.connect()
+        voice_clients[message.guild_id] = vc
+        
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+            tts = gTTS(text=text, lang='en')
+            tts.save(f.name)
+            temp_file = f.name
+        
+        source = discord.FFmpegPCMAudio(temp_file)
+        source = discord.PCMVolumeTransformer(source)
+        source.volume = DEFAULT_VOLUME
+        
+        def after_playing(error):
+            if error:
+                logger.error(f"TTS error: {error}")
+            asyncio.run_coroutine_threadsafe(
+                disconnect_voice(message.guild_id), 
+                bot.loop
+            )
+            try:
+                os.unlink(temp_file)
+            except:
+                pass
+        
+        vc.play(source, after=after_playing)
+        await message.channel.send(f"🗣️ Saying: {text}")
+        
+    except Exception as e:
+        logger.error(f"Say error: {e}")
+        await message.channel.send(f"❌ Error: {str(e)[:100]}")
+
+async def stream_command_legacy(message, url: str):
+    """Legacy stream command"""
+    if not message.user.voice:
+        await message.channel.send("❌ Join a voice channel first!")
+        return
+    
+    try:
+        await disconnect_voice(message.guild_id)
+        
+        vc = await message.user.voice.channel.connect()
+        voice_clients[message.guild_id] = vc
+        
+        source = discord.FFmpegPCMAudio(
+            url,
+            options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+        )
+        source = discord.PCMVolumeTransformer(source)
+        source.volume = DEFAULT_VOLUME
+        
+        def after_playing(error):
+            if error:
+                logger.error(f"Stream error: {error}")
+            asyncio.run_coroutine_threadsafe(
+                disconnect_voice(message.guild_id), 
+                bot.loop
+            )
+        
+        vc.play(source, after=after_playing)
+        await message.channel.send(f"📡 Streaming: {url}")
+        
+    except Exception as e:
+        logger.error(f"Stream error: {e}")
         await message.channel.send(f"❌ Error: {str(e)[:100]}")
 
 # ============== VOICE NOTIFIER API ==============
@@ -312,6 +464,182 @@ async def status_handler(request):
         'active_voice_connections': len(voice_clients)
     })
 
+async def search_handler(request):
+    """Search for streams/audio"""
+    query = request.query.get('q', '')
+    if not query:
+        return web.json_response({'error': 'No query provided'}, status=400)
+    
+    try:
+        # Search YouTube
+        result = subprocess.run(
+            ['yt-dlp', '--flat-playlist', '-J', f'ytsearch10:{query}'],
+            capture_output=True, text=True, timeout=30
+        )
+        
+        import json
+        data = json.loads(result.stdout)
+        entries = []
+        
+        for entry in data.get('entries', [])[:10]:
+            entries.append({
+                'title': entry.get('title', 'Unknown'),
+                'url': entry.get('url', ''),
+                'duration': entry.get('duration', 0),
+                'source': 'youtube'
+            })
+        
+        return web.json_response({'results': entries})
+        
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        return web.json_response({'error': str(e)}, status=500)
+
+async def stream_handler(request):
+    """Play a direct stream URL"""
+    try:
+        data = await request.json()
+        url = data.get('url', '')
+        channel_id = data.get('channel_id')
+        
+        if not url:
+            return web.json_response({'error': 'No URL provided'}, status=400)
+        
+        # Find channel
+        if channel_id:
+            channel = bot.get_channel(int(channel_id))
+        else:
+            # Use first available voice channel
+            channel = None
+            for vc in voice_clients.values():
+                if vc.channel:
+                    channel = vc.channel
+                    break
+        
+        if not channel:
+            return web.json_response({'error': 'No voice channel available'}, status=400)
+        
+        # Disconnect existing
+        await disconnect_voice(channel.guild.id)
+        
+        # Connect
+        vc = await channel.connect()
+        voice_clients[channel.guild.id] = vc
+        
+        # Play stream
+        source = discord.FFmpegPCMAudio(
+            url,
+            options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+        )
+        source = discord.PCMVolumeTransformer(source)
+        source.volume = DEFAULT_VOLUME
+        
+        def after_playing(error):
+            if error:
+                logger.error(f"Stream error: {error}")
+            asyncio.run_coroutine_threadsafe(
+                disconnect_voice(channel.guild.id), 
+                bot.loop
+            )
+        
+        vc.play(source, after=after_playing)
+        logger.info(f"Streaming: {url}")
+        return web.json_response({'status': 'playing', 'url': url})
+        
+    except Exception as e:
+        logger.error(f"Stream error: {e}")
+        return web.json_response({'error': str(e)}, status=500)
+
+async def decide_handler(request):
+    """OpenClaw calls this to decide: stream or TTS?
+    
+    Pass context and OpenClaw Voice will:
+    1. Get context/news from OpenClaw
+    2. Decide: play stream OR TTS the response
+    3. Execute
+    """
+    try:
+        data = await request.json()
+        context = data.get('context', '')  # e.g., "latest news", "weather", "alert"
+        message = data.get('message', '')  # Fallback TTS message
+        channel_id = data.get('channel_id')
+        
+        # Find channel
+        if channel_id:
+            channel = bot.get_channel(int(channel_id))
+        else:
+            channel = None
+            for vc in voice_clients.values():
+                if vc.channel:
+                    channel = vc.channel
+                    break
+        
+        if not channel:
+            return web.json_response({'error': 'No voice channel available'}, status=400)
+        
+        # Simple decision logic (can be enhanced with AI)
+        # If context suggests "stream" - find a stream
+        # Otherwise - TTS the message
+        
+        stream_keywords = ['music', 'radio', 'stream', 'live', 'listen', 'playlist']
+        is_stream_request = any(kw in context.lower() for kw in stream_keywords)
+        
+        if is_stream_request and message:
+            # Search for a stream
+            try:
+                result = subprocess.run(
+                    ['yt-dlp', '-f', 'bestaudio', '--get-url', f'ytsearch1:{message}'],
+                    capture_output=True, text=True, timeout=30
+                )
+                url = result.stdout.strip().split('\n')[0]
+                
+                if url and url.startswith('http'):
+                    # Disconnect and play stream
+                    await disconnect_voice(channel.guild.id)
+                    vc = await channel.connect()
+                    voice_clients[channel.guild.id] = vc
+                    
+                    source = discord.FFmpegPCMAudio(
+                        url,
+                        options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
+                    )
+                    source = discord.PCMVolumeTransformer(source)
+                    source.volume = DEFAULT_VOLUME
+                    
+                    def after_playing(error):
+                        if error:
+                            logger.error(f"Stream error: {error}")
+                        asyncio.run_coroutine_threadsafe(
+                            disconnect_voice(channel.guild.id), 
+                            bot.loop
+                        )
+                    
+                    vc.play(source, after=after_playing)
+                    return web.json_response({
+                        'decision': 'stream', 
+                        'url': url,
+                        'status': 'playing'
+                    })
+            except Exception as e:
+                logger.error(f"Stream search error: {e}")
+        
+        # Default to TTS
+        if message:
+            await disconnect_voice(channel.guild.id)
+            success = await speak_in_channel(channel.id, message)
+            if success:
+                return web.json_response({
+                    'decision': 'tts',
+                    'message': message,
+                    'status': 'playing'
+                })
+        
+        return web.json_response({'error': 'Could not fulfill request'}, status=400)
+        
+    except Exception as e:
+        logger.error(f"Decide error: {e}")
+        return web.json_response({'error': str(e)}, status=500)
+
 # ============== EVENTS ==============
 
 @bot.event
@@ -325,6 +653,9 @@ async def on_ready():
     app = web.Application()
     app.router.add_post('/notify', notify_handler)
     app.router.add_get('/status', status_handler)
+    app.router.add_get('/search', search_handler)
+    app.router.add_post('/stream', stream_handler)
+    app.router.add_post('/decide', decide_handler)  # AI decides: stream or TTS
     
     runner = web.AppRunner(app)
     await runner.setup()
