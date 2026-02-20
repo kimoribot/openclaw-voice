@@ -18,6 +18,8 @@ VERBOSITY = os.getenv('VERBOSITY', 'minimal')  # default to minimal
 # Feature flags
 ENABLE_AI = os.getenv('ENABLE_AI', 'true').lower() == 'true'
 OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://localhost:11434')
+# Alternative: use a dedicated OpenClaw endpoint
+OPENCLAW_URL = os.getenv('OPENCLAW_URL', OLLAMA_URL)
 
 def should_respond(level='minimal'):
     """Check if we should respond based on verbosity setting"""
