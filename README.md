@@ -1,17 +1,27 @@
-# OpenClaw Voice - Stream & TTS Bot
+# OpenClaw Voice 🎤
 
-A flexible Discord voice channel bot for OpenClaw - streams audio from anywhere, speaks notifications, and integrates with OpenClaw for intelligent voice responses.
+A flexible Discord voice channel bot for OpenClaw - streams audio, TTS notifications, and intelligent voice responses.
 
 ## Features
 
-- **Multi-source Stream Search** - Search YouTube, Twitch, radio stations, podcasts
-- **Voice Notifications** - OpenClaw triggers TTS announcements (builds complete, reminders, etc.)
-- **Intelligent Responses** - OpenClaw decides: play a stream OR speak the response
-- **Configurable Bot Name** - Works with any bot name
-- **Native Commands** - Full Discord slash commands
-- **OpenClaw Skill** - One-click installation for OpenClaw instances
+- **Multi-source Streaming** - YouTube, direct URLs, radio streams
+- **TTS Notifications** - Speak messages in voice channels
+- **Smart /notify Command** - Searches web + AI to generate spoken responses
+- **Configurable Verbosity** - Silent, minimal, normal, or verbose output
+- **Docker Ready** - Easy deployment
+- **OpenClaw Skill** - One-click integration
 
 ## Quick Start
+
+### Run with Docker
+
+```bash
+# Build
+docker build -t openclaw-voice .
+
+# Run
+docker run -d --env-file .env openclaw-voice
+```
 
 ### Run Locally
 
@@ -21,104 +31,85 @@ pip install -r requirements.txt
 
 # Configure
 cp .env.example .env
-# Edit .env with your bot token and settings
+# Edit .env with your bot token
 
 # Run
-python3 bot.py
+python3 -m openclaw_voice.bot
 ```
 
-### Run with Docker
+## Configuration
 
-```bash
-docker build -t openclaw-voice .
-docker run -d --env-file .env openclaw-voice
-```
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `DISCORD_BOT_TOKEN` | Discord bot token | (required) |
+| `BOT_NAME` | Bot display name | OpenClaw |
+| `DEFAULT_VOLUME` | Audio volume (0.0-1.0) | 0.8 |
+| `NOTIFIER_PORT` | API server port | 5000 |
+| `VERBOSITY` | Output level | minimal |
+| `ENABLE_AI` | Enable AI features | true |
+| `OLLAMA_URL` | Ollama API URL | http://localhost:11434 |
 
-## Configuration (.env)
+### Verbosity Levels
 
-```env
-DISCORD_BOT_TOKEN=your_token_here
-BOT_NAME=OpenClaw
-DEFAULT_VOLUME=0.8
-NOTIFIER_PORT=5000
-OLLAMA_URL=http://localhost:11434
-```
+- **silent** - Only errors
+- **minimal** - Only important info (now playing, errors)
+- **normal** - Standard responses  
+- **verbose** - All debug info
 
 ## Commands
 
 ### Slash Commands
-- `/play <query>` - Search and play audio (YouTube, streams, radio)
-- `/stream <url>` - Play a direct stream URL
-- `/say <message>` - Speak a message via TTS
-- `/join` - Join your voice channel
-- `/leave` - Leave voice channel
+- `/play <query>` - Search and play YouTube audio
+- `/search <query>` - Search for streams (preview)
+- `/say <message>` - TTS speak a message
+- `/notify <request>` - AI processes request + speaks in voice
+- `/stream <url>` - Play direct URL
+- `/join` / `/leave` - Voice channel control
 - `/stop` - Stop playback
-- `/search <query>` - Search for streams/audio
 
-### Message Commands (with @mention)
-- `@OpenClaw play jazz` - Play music
-- `@OpenClaw say hello` - Speak a message
-- `@OpenClaw stream https://...` - Play direct URL
+### Message Commands
+- `@Bot play jazz` - Play music
+- `@Bot say hello` - TTS speak
+- `@Bot notify tell me the news` - AI + voice
+
+## API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/status` | GET | Health check |
+| `/notify` | POST | TTS notification |
+| `/stream` | POST | Play stream URL |
+| `/search` | GET | Search streams |
+
+### API Examples
+
+```bash
+# TTS notification
+curl -X POST http://localhost:5000/notify \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Build complete!", "channel_id": "123"}'
+
+# Play stream
+curl -X POST http://localhost:5000/stream \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://stream.url", "channel_id": "123"}'
+
+# Search
+curl "http://localhost:5000/search?q=lofi"
+```
 
 ## OpenClaw Integration
 
-### Notifier API
-
-Trigger voice from OpenClaw:
-
-```bash
-# TTS Notification
-curl -X POST http://localhost:5000/notify \
-  -H "Content-Type: application/json" \
-  -d '{"message": "Kevin, your build is done!", "channel_id": "123456789"}'
-
-# Play Stream
-curl -X POST http://localhost:5000/stream \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://stream.url", "channel_id": "123456789"}'
-
-# Search Streams
-curl "http://localhost:5000/search?q=lofi+hip+hop+radio"
+Set environment:
+```
+OPENCLAW_VOICE_URL=http://localhost:5000
 ```
 
-### OpenClaw Skill
+Then OpenClaw can trigger voice notifications via the API.
 
-Install as an OpenClaw skill for seamless integration:
+## Version
 
-```bash
-# The skill provides:
-# - Voice command shortcuts
-# - Automatic TTS for notifications
-# - Stream search integration
-```
-
-## Architecture
-
-```
-┌─────────────┐     API      ┌──────────────────┐
-│   OpenClaw  │──────────────▶│  OpenClaw Voice  │
-│  (brain)    │   /notify     │  (Discord bot)   │
-│             │   /stream     │                  │
-│             │   /search     │  - Stream player │
-│             │               │  - TTS engine    │
-│             │               │  - Multi-source  │
-└─────────────┘               └──────────────────┘
-        │                              │
-        │ Context-aware               │
-        │ decisions:                  │
-        │ - News → stream or TTS?     │
-        │ - Music → play              │
-        │ - Alert → TTS               │
-        ▼                              ▼
-```
-
-## Supported Sources
-
-- YouTube / YouTube Music
-- Twitch streams
-- Direct stream URLs (MP3, AAC, OGG)
-- Internet radio stations
-- Any direct audio URL
+Current: **v1.0.0**
 
 ## License
 
