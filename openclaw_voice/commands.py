@@ -62,7 +62,7 @@ def setup_commands(tree, bot):
             results_text = "**Search Results:**\n"
             for i, entry in enumerate(results[:10], 1):
                 title = entry['title'][:50]
-                duration = entry['duration']
+                duration = int(entry.get('duration', 0) or 0)
                 mins = duration // 60
                 secs = duration % 60
                 results_text += f"{i}. {title} ({mins}:{secs:02d})\n"
