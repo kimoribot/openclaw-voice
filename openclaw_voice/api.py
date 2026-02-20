@@ -112,6 +112,39 @@ def setup_api(app, notifier_port):
         })
     
     
+    async def voice_handler(request):
+        """Get voice channel info - checks any user in any guild the bot is in"""
+        try:
+            data = await request.json()
+            user_id = str(data.get('user_id', '')).replace('<@', '').replace('>', '').replace('!', '')
+            
+            if not user_id:
+                return web.json_response({'error': 'user_id required'}, status=400)
+            
+            # Search all guilds the bot is in
+            for guild in bot.guilds:
+                # Get all voice channels and check who's in them
+                for channel in guild.voice_channels:
+                    for member in channel.members:
+                        if str(member.id) == user_id:
+                            return web.json_response({
+                                'in_voice': True,
+                                'channel_id': str(channel.id),
+                                'channel_name': channel.name,
+                                'guild_id': str(guild.id),
+                                'guild_name': guild.name
+                            })
+            
+            return web.json_response({
+                'in_voice': False,
+                'message': 'User not in any voice channel'
+            })
+            
+        except Exception as e:
+            logger.error(f"Voice check error: {e}")
+            return web.json_response({'error': str(e)}, status=500)
+    
+    
     async def control_handler(request):
         """Control playback (stop, pause, etc.)"""
         try:
@@ -140,6 +173,7 @@ def setup_api(app, notifier_port):
     app.router.add_post('/notify', notify_handler)
     app.router.add_post('/stream', stream_handler)
     app.router.add_post('/control', control_handler)
+    app.router.add_post('/voice', voice_handler)
     app.router.add_get('/search', search_handler)
     app.router.add_get('/status', status_handler)
     
@@ -149,6 +183,7 @@ def setup_api(app, notifier_port):
         'control': control_handler,
         'search': search_handler,
         'status': status_handler,
+        'voice': voice_handler,
     }
 
 
