@@ -1,5 +1,5 @@
 """
-OpenClaw Voice - Config
+OpenClaw Discord Voice - Config
 """
 import os
 from dotenv import load_dotenv
@@ -14,6 +14,20 @@ NOTIFIER_PORT = int(os.getenv('NOTIFIER_PORT', '5000'))
 
 # Verbosity: silent, minimal, normal, verbose
 VERBOSITY = os.getenv('VERBOSITY', 'minimal')
+
+# Text channel response when speaking in voice
+# Options: always, never, errors_only
+TEXT_RESPONSE = os.getenv('TEXT_RESPONSE', 'always')
+
+def should_respond_in_text():
+    """Check if we should respond in text channel when speaking"""
+    if TEXT_RESPONSE == 'always':
+        return True
+    elif TEXT_RESPONSE == 'never':
+        return False
+    elif TEXT_RESPONSE == 'errors_only':
+        return False  # Only errors would be handled separately
+    return True
 
 def should_respond(level='minimal'):
     """Check if we should respond based on verbosity"""
