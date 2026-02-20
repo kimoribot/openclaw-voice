@@ -1,0 +1,30 @@
+{
+  "name": "openclaw-discord-voice",
+  "version": "2.0.0",
+  "description": "Discord voice channel integration for OpenClaw - plays streams and speaks TTS",
+  "main": "openclaw_voice/bot.py",
+  "scripts": {
+    "start": "python3 -m openclaw_voice.bot",
+    "install": "pip install -r requirements.txt"
+  },
+  "keywords": [
+    "discord",
+    "voice",
+    "tts",
+    "openclaw",
+    "ai"
+  ],
+  "author": "Kimori",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kimoribot/openclaw-discord-voice.git"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "openclaw": {
+    "skill": "voice",
+    "description": "Discord voice - TTS and audio streaming"
+  }
+}
