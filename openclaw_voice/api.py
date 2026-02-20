@@ -9,7 +9,7 @@ from aiohttp import web
 from aiohttp.web import TCPSite
 
 from . import player
-from .config import BOT_NAME
+from .config import BOT_NAME, should_respond_in_text
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,15 @@ def setup_api(app, notifier_port):
             await player.play_tts(channel, message, channel.guild.id)
             
             logger.info(f"TTS notification: {message[:50]}")
+            
+            # Optionally respond in text channel too
+            if should_respond_in_text():
+                text_channel = channel  # Same channel for text
+                try:
+                    await text_channel.send(f"🎙️ {message}")
+                except Exception as e:
+                    logger.warning(f"Text response failed: {e}")
+            
             return web.json_response({'status': 'playing', 'message': message})
             
         except Exception as e:
@@ -82,6 +91,14 @@ def setup_api(app, notifier_port):
             await player.play_url(channel, url, channel.guild.id)
             
             logger.info(f"Streaming: {url[:50]}")
+            
+            # Optionally respond in text channel too
+            if should_respond_in_text():
+                try:
+                    await channel.send("🎵 Now playing!")
+                except Exception as e:
+                    logger.warning(f"Text response failed: {e}")
+            
             return web.json_response({'status': 'playing', 'url': url})
             
         except Exception as e:
@@ -121,11 +138,15 @@ def setup_api(app, notifier_port):
             if not user_id:
                 return web.json_response({'error': 'user_id required'}, status=400)
             
+            logger.info(f"Checking voice for user_id: {user_id}, bot guilds: {[g.id for g in bot.guilds]}")
+            
             # Search all guilds the bot is in
             for guild in bot.guilds:
+                logger.info(f"Checking guild {guild.id}, voice_channels: {len(guild.voice_channels)}")
                 # Get all voice channels and check who's in them
                 for channel in guild.voice_channels:
                     for member in channel.members:
+                        logger.info(f"  Channel {channel.name}: member {member.id} ({member.name})")
                         if str(member.id) == user_id:
                             return web.json_response({
                                 'in_voice': True,
