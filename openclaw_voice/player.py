@@ -32,11 +32,27 @@ async def play_url(voice_channel, url, guild_id):
     """Play a URL in a voice channel"""
     await disconnect(guild_id)
     
+    # Get direct stream URL if it's a YouTube URL
+    stream_url = url
+    if 'youtube.com' in url or 'youtu.be' in url:
+        try:
+            result = subprocess.run(
+                ['yt-dlp', '-f', 'bestaudio', '--get-url', url],
+                capture_output=True, text=True, timeout=30
+            )
+            stream_url = result.stdout.strip().split('\n')[0]
+            if not stream_url.startswith('http'):
+                logger.warning(f"Could not get stream URL, trying direct: {stream_url}")
+                stream_url = url  # Fallback
+        except Exception as e:
+            logger.warning(f"Failed to get stream URL: {e}")
+            stream_url = url
+    
     vc = await voice_channel.connect()
     voice_clients[guild_id] = vc
     
     source = discord.FFmpegPCMAudio(
-        url,
+        stream_url,
         options="-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"
     )
     source = discord.PCMVolumeTransformer(source)
