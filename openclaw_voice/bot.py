@@ -35,7 +35,8 @@ async def on_ready():
     """Bot ready"""
     logger.info(f"✅ Logged in as {bot.user} ({BOT_NAME})")
     
-    # Sync commands
+    # Setup and sync commands
+    commands.setup_commands(tree, bot)
     await tree.sync()
     logger.info("Slash commands synced")
     
