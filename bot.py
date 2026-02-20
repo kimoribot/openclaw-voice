@@ -191,6 +191,121 @@ async def say_command(interaction: discord.Interaction, message: str):
         logger.error(f"Say error: {e}")
         await interaction.followup.send(f"❌ Error: {str(e)[:100]}")
 
+@tree.command(name="search", description="Search for audio streams")
+async def search_command(interaction: discord.Interaction, query: str):
+    """Search for streams (for preview before playing)"""
+    await interaction.response.defer()
+    
+    try:
+        result = subprocess.run(
+            ['yt-dlp', '--flat-playlist', '-J', f'ytsearch10:{query}'],
+            capture_output=True, text=True, timeout=30
+        )
+        
+        import json
+        data = json.loads(result.stdout)
+        entries = data.get('entries', [])[:10]
+        
+        if not entries:
+            await interaction.followup.send("❌ No results found!")
+            return
+        
+        # Format results
+        results_text = "**Search Results:**\n"
+        for i, entry in enumerate(entries, 1):
+            title = entry.get('title', 'Unknown')[:50]
+            duration = entry.get('duration', 0)
+            mins = duration // 60
+            secs = duration % 60
+            results_text += f"{i}. {title} ({mins}:{secs:02d})\n"
+        
+        await interaction.followup.send(results_text)
+        
+    except Exception as e:
+        logger.error(f"Search error: {e}")
+        await interaction.followup.send(f"❌ Error: {str(e)[:100]}")
+
+@tree.command(name="notify", description="Ask OpenClaw to process and speak in voice")
+async def notify_command(interaction: discord.Interaction, request: str):
+    """Process request via OpenClaw, then speak result in voice"""
+    await interaction.response.defer()
+    
+    if not interaction.user.voice:
+        await interaction.followup.send("❌ Join a voice channel first!")
+        return
+    
+    try:
+        # Send to OpenClaw for processing
+        # Use the configured OLLAMA_URL or OpenClaw gateway
+        openclaw_url = OLLAMA_URL.replace('/api/generate', '')
+        
+        # Call OpenClaw to process the request
+        # This is where OpenClaw (the brain) processes the request
+        # and returns a response to be spoken
+        
+        response_text = None
+        
+        # Try calling OpenClaw's chat API if available
+        try:
+            chat_payload = {
+                "model": "llama3.2",
+                "messages": [
+                    {"role": "system", "content": "You are OpenClaw's voice assistant. Provide a concise, conversational response that can be spoken aloud. Keep it brief (2-3 sentences max)."},
+                    {"role": "user", "content": request}
+                ],
+                "stream": False
+            }
+            chat_resp = requests.post(
+                f"{openclaw_url}/api/chat/completions",
+                json=chat_payload,
+                timeout=30
+            )
+            if chat_resp.ok:
+                resp_data = chat_resp.json()
+                response_text = resp_data.get('choices', [{}])[0].get('message', {}).get('content', '')
+        except Exception as e:
+            logger.warning(f"OpenClaw chat unavailable: {e}")
+        
+        # If no response from OpenClaw, use a fallback
+        if not response_text:
+            response_text = f"I'll check that out for you. {request}"
+        
+        # Join voice and speak the response
+        await disconnect_voice(interaction.guild_id)
+        vc = await interaction.user.voice.channel.connect()
+        voice_clients[interaction.guild_id] = vc
+        
+        # Generate TTS
+        with tempfile.NamedTemporaryFile(suffix='.mp3', delete=False) as f:
+            tts = gTTS(text=response_text, lang='en')
+            tts.save(f.name)
+            temp_file = f.name
+        
+        # Play
+        source = discord.FFmpegPCMAudio(temp_file)
+        source = discord.PCMVolumeTransformer(source)
+        source.volume = DEFAULT_VOLUME
+        
+        def after_playing(error):
+            if error:
+                logger.error(f"Notify TTS error: {error}")
+            asyncio.run_coroutine_threadsafe(
+                disconnect_voice(interaction.guild_id), 
+                bot.loop
+            )
+            try:
+                os.unlink(temp_file)
+            except:
+                pass
+        
+        vc.play(source, after=after_playing)
+        
+        await interaction.followup.send(f"🔔 **OpenClaw:** {response_text}")
+        
+    except Exception as e:
+        logger.error(f"Notify error: {e}")
+        await interaction.followup.send(f"❌ Error: {str(e)[:100]}")
+
 # ============== MESSAGE HANDLER ==============
 
 @bot.event
